@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Music → App (iOS)
-// @namespace    https://github.com/tu-usuario
-// @version      1.0
+// @namespace    https://github.com/twozerozerofour
+// @version      1.1
 // @description  Abre enlaces de YouTube Music en la app oficial de iOS desde Safari
 // @match        *://*/*
 // @grant        none
@@ -11,48 +11,66 @@
 (function() {
     'use strict';
 
-    // Esquema de URL que utiliza la app oficial de YouTube Music en iOS.
-    // Basado en los esquemas registrados: vnd.youtube.music://
+    // Esquema URL registrado por la app oficial de YouTube Music en iOS.
     const APP_SCHEME = 'vnd.youtube.music://';
+
+    // Hostnames de YouTube Music que deben abrirse en la app.
+    const MUSIC_HOSTS = new Set([
+        'music.youtube.com',
+        'app.music.youtube.com'
+    ]);
+
+    /**
+     * Comprueba si una URL pertenece a YouTube Music.
+     * @param {string} url - URL absoluta o relativa.
+     * @returns {boolean}
+     */
+    function isMusicUrl(url) {
+        try {
+            return MUSIC_HOSTS.has(new URL(url, location.href).hostname);
+        } catch {
+            return false;
+        }
+    }
 
     /**
      * Convierte una URL web de YouTube Music en su equivalente para la app.
-     * @param {string} webUrl - URL completa (ej. https://music.youtube.com/watch?v=...)
-     * @returns {string} URL con el esquema de la app (ej. vnd.youtube.music://music.youtube.com/watch?v=...)
+     *
+     * Por defecto se conserva el hostname original (music.youtube.com o
+     * app.music.youtube.com). Si descubres que la app no reconoce el
+     * segundo, descomenta el bloque "Opción B" para normalizarlo.
      */
     function buildAppUrl(webUrl) {
-        // Elimina el protocolo (http:// o https://) para concatenar el resto.
-        const withoutProtocol = webUrl.replace(/^https?:\/\//, '');
+        const u = new URL(webUrl, location.href);
+
+        // --- Opción B (descomenta si es necesario) ---
+        // if (u.hostname === 'app.music.youtube.com') {
+        //     u.hostname = 'music.youtube.com';
+        // }
+        // ---------------------------------------------
+
+        const withoutProtocol = u.href.replace(/^https?:\/\//, '');
         return APP_SCHEME + withoutProtocol;
     }
 
     // -----------------------------------------------------------------
     // 1. REDIRECCIÓN AUTOMÁTICA SI YA ESTAMOS EN YOUTUBE MUSIC
     // -----------------------------------------------------------------
-    if (window.location.hostname === 'music.youtube.com') {
-        // Construye la URL de la app y redirige.
-        const appUrl = buildAppUrl(window.location.href);
-        window.location.href = appUrl;
-        // Detiene la ejecución del script para no interferir.
+    if (MUSIC_HOSTS.has(location.hostname)) {
+        window.location.href = buildAppUrl(location.href);
         return;
     }
 
     // -----------------------------------------------------------------
-    // 2. INTERCEPTAR CLICS EN ENLACES A YOUTUBE MUSIC DESDE OTRAS WEBS
+    // 2. INTERCEPTAR CLICS EN ENLACES A YOUTUBE MUSIC
     // -----------------------------------------------------------------
     document.addEventListener('click', function(event) {
-        // Busca el elemento <a> más cercano al clic.
         const link = event.target.closest('a');
-        if (!link) return;
+        if (!link || !link.href) return;
 
-        const href = link.href;
-        // Verifica si el enlace apunta a music.youtube.com.
-        if (href && href.includes('music.youtube.com')) {
-            // Evita que Safari abra el enlace en la web.
+        if (isMusicUrl(link.href)) {
             event.preventDefault();
-            // Redirige a la app.
-            const appUrl = buildAppUrl(href);
-            window.location.href = appUrl;
+            window.location.href = buildAppUrl(link.href);
         }
-    }, true); // El tercer parámetro 'true' activa la captura para interceptar antes.
+    }, true);
 })();
